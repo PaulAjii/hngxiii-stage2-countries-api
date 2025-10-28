@@ -19,7 +19,7 @@ import { CountriesModule } from './countries/countries.module';
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
       entities: [Country],
-      synchronize: true,
+      synchronize: false,
     }),
     CountriesModule,
   ],
