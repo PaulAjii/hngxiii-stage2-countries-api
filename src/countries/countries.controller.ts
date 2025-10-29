@@ -21,6 +21,14 @@ export class CountriesController {
     return this.countriesService.filterCountry(filterQuery);
   }
 
+  @Get('image')
+  @Header('Content-Type', 'image/png')
+  getSummaryImage(): StreamableFile {
+    const imagePath = this.countriesService.getSummaryImage();
+
+    return new StreamableFile(imagePath);
+  }
+
   @Get(':name')
   getSingleCountry(@Param('name') name: string) {
     return this.countriesService.getSingleCountry(name);
@@ -35,14 +43,6 @@ export class CountriesController {
   @Post('refresh')
   addCountries() {
     return this.countriesService.addCountries();
-  }
-
-  @Get('image')
-  @Header('Content-Type', 'image/png')
-  getSummaryImage(): StreamableFile {
-    const imagePath = this.countriesService.getSummaryImage();
-
-    return new StreamableFile(imagePath);
   }
 }
 

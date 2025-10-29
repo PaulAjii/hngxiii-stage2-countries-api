@@ -28,13 +28,12 @@ export default async function generateImage(
     <svg width="800" height="450" xmlns="http://www.w3.org/2000/svg">
       <style>
         .container {
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-family: sans-serif;
           background-color: #0d1117;
           color: #c9d1d9;
-          width: 100%;
-          height: 100%;
-          display: flex;
-          flex-direction: column;
+          width: 800px;
+          height: 450px;
+          box-sizing: border-box;
           padding: 30px;
           border-radius: 10px;
         }
@@ -65,7 +64,7 @@ export default async function generateImage(
       </style>
       <foreignObject width="100%" height="100%">
         <div xmlns="http://www.w3.org/1999/xhtml" class="container">
-          <h1>📈 Top 5 Countries by Estimated GDP</h1>
+          <h1>📈 Countries by Estimated GDP</h1>
           
           <p><strong>Total Countries: </strong> ${total_countries}</p>
           <p><strong>Last Refresh Time: </strong> ${last_refreshed_at.toUTCString()}</p>
