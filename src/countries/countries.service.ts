@@ -49,8 +49,10 @@ export class CountriesService {
         | CountryApiResponse[]
         | ExchangeRateApiResponse;
     } catch (error: any) {
-      if (error.name === 'AbortError') {
-        throw new Error(`Request timed out`);
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          throw new Error(`Request timed out`);
+        }
       }
       throw error;
     } finally {
