@@ -21,3 +21,13 @@ export class CountriesController {
     return this.countriesService.addCountries();
   }
 }
+
+@Controller('status')
+export class StatusController {
+  constructor(private countriesService: CountriesService) {}
+
+  @Get()
+  getStatus() {
+    return this.countriesService.getStatus();
+  }
+}
