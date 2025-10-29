@@ -2,10 +2,12 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   Param,
   Post,
   Query,
+  StreamableFile,
 } from '@nestjs/common';
 import { CountriesService } from './countries.service';
 import { QueryDto } from './dto/query.dto';
@@ -33,6 +35,14 @@ export class CountriesController {
   @Post('refresh')
   addCountries() {
     return this.countriesService.addCountries();
+  }
+
+  @Get('image')
+  @Header('Content-Type', 'image/png')
+  getSummaryImage(): StreamableFile {
+    const imagePath = this.countriesService.getSummaryImage();
+
+    return new StreamableFile(imagePath);
   }
 }
 

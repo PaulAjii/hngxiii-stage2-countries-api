@@ -11,7 +11,11 @@ import { QueryDto } from './dto/query.dto';
 import { StatusDto } from './dto/status.dto';
 import type { CountryApiResponse, ExchangeRateApiResponse } from './interfaces';
 import generateRandomNumber from './utils/generate_random';
+import generateImage from './utils/generate_image';
 import { ILike, DataSource } from 'typeorm';
+import fs from 'node:fs';
+import path from 'node:path';
+import { ReadStream } from 'fs';
 
 interface StatusInterface {
   total_countries: string;
@@ -104,6 +108,18 @@ export class CountriesService {
       }
 
       await queryRunner.commitTransaction();
+
+      try {
+        const totalCountries = await this.countriesRepository.count();
+        const top5Countries = (await this.countriesRepository.find({
+          order: { estimated_gdp: 'DESC' },
+          select: ['name', 'estimated_gdp'],
+          take: 5,
+        })) as { name: string; estimated_gdp: number }[];
+        await generateImage(totalCountries, top5Countries, refreshTime);
+      } catch (imageError) {
+        console.log('Failed to generate image: ', imageError);
+      }
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.error('Error adding countries:', error);
@@ -198,5 +214,15 @@ export class CountriesService {
     }
 
     return;
+  }
+
+  getSummaryImage(): ReadStream {
+    const imagePath = path.resolve(process.cwd(), 'cache', 'summary.png');
+
+    if (!fs.existsSync(imagePath)) {
+      throw new NotFoundException('Summary image not found');
+    }
+
+    return fs.createReadStream(imagePath);
   }
 }
