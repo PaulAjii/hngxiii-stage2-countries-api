@@ -127,7 +127,7 @@ export class CountriesService {
         countryToSave.currency_code = currencyCode;
         countryToSave.flag_url = c.flag;
         countryToSave.exchange_rate = exchangeRate;
-        countryToSave.estimated_gdp = estimatedGGdp;
+        countryToSave.estimated_gdp = estimatedGdp;
         countryToSave.last_refreshed_at = refreshTime;
 
         countriesToSave.push(countryToSave);
