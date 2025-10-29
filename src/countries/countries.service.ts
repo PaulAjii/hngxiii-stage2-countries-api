@@ -151,7 +151,7 @@ export class CountriesService {
       if (!name) {
         throw new BadRequestException('Country name is required');
       }
-      const country = await this.countriesRepository.findOneOrFail({
+      const country = await this.countriesRepository.findOne({
         where: { name },
       });
 
@@ -185,5 +185,18 @@ export class CountriesService {
       total_countries: totalCountries,
       last_refreshed_at: status.last_refreshed_at,
     };
+  }
+
+  async deleteCountry(name: string): Promise<void> {
+    if (!name || typeof name !== 'string') {
+      throw new BadRequestException('Country name is required');
+    }
+
+    const result = await this.countriesRepository.delete({ name });
+    if (result.affected === 0) {
+      throw new NotFoundException('Country not found');
+    }
+
+    return;
   }
 }

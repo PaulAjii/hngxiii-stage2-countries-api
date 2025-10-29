@@ -1,4 +1,12 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Param,
+  Post,
+  Query,
+} from '@nestjs/common';
 import { CountriesService } from './countries.service';
 import { QueryDto } from './dto/query.dto';
 
@@ -14,6 +22,12 @@ export class CountriesController {
   @Get(':name')
   getSingleCountry(@Param('name') name: string) {
     return this.countriesService.getSingleCountry(name);
+  }
+
+  @Delete(':name')
+  @HttpCode(204)
+  deleteCountry(@Param('name') name: string) {
+    return this.countriesService.deleteCountry(name);
   }
 
   @Post('refresh')
