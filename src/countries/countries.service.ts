@@ -30,35 +30,59 @@ export class CountriesService {
     private dataSource: DataSource,
   ) {}
 
+  private async fetchWithTimeout(url: string, timeoutMs: number = 8000) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      return (await response.json()) as
+        | CountryApiResponse[]
+        | ExchangeRateApiResponse;
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        throw new Error(`Request timed out`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   async addCountries(): Promise<void> {
     let exchangeRateData: ExchangeRateApiResponse;
-    try {
-      const exchangeRateResponse = await fetch(
-        'https://open.er-api.com/v6/latest/USD',
-      );
-      if (!exchangeRateResponse.ok)
-        throw new Error('Failed to fetch exchange rates');
-      exchangeRateData =
-        (await exchangeRateResponse.json()) as ExchangeRateApiResponse;
-    } catch (error) {
-      console.error('External API Error:', error);
-      throw new ServiceUnavailableException(
-        'External data source unavavailable',
-      );
-    }
-
     let countriesData: CountryApiResponse[];
     try {
-      const countriesResponse = await fetch(
-        'https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies',
-      );
-      if (!countriesResponse.ok) throw new Error('Failed to fetch countries');
-      countriesData = (await countriesResponse.json()) as CountryApiResponse[];
+      exchangeRateData = (await this.fetchWithTimeout(
+        'https://open.er-api.com/v6/latest/USD',
+      )) as ExchangeRateApiResponse;
     } catch (error) {
-      console.error('External API Error:', error);
-      throw new ServiceUnavailableException(
-        'External data source unavavailable',
-      );
+      console.log(error);
+      throw new ServiceUnavailableException({
+        error: 'External data source unavailable',
+        details: 'Could not fetch data from Exchange Rate API',
+      });
+    }
+
+    try {
+      countriesData = (await this.fetchWithTimeout(
+        'https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies',
+      )) as CountryApiResponse[];
+    } catch (error) {
+      console.log(error);
+      throw new ServiceUnavailableException({
+        error: 'External data source unavailable',
+        details: 'Could not fetch data from RestCountries API',
+      });
     }
 
     const refreshTime = new Date();
