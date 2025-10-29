@@ -4,7 +4,7 @@ import sharp from 'sharp';
 
 export default async function generateImage(
   total_countries: number,
-  top_5_countries: { name: string; estimated_gdp: number }[],
+  top_5_countries: { name: string; estimated_gdp: number | null }[],
   last_refreshed_at: Date,
 ) {
   const formatGdp = (gdp: number | null) => {

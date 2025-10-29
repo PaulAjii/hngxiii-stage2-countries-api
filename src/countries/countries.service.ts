@@ -16,6 +16,9 @@ import { ILike, DataSource } from 'typeorm';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ReadStream } from 'fs';
+import { HttpService } from '@nestjs/axios';
+import axios from 'axios';
+import { firstValueFrom } from 'rxjs';
 
 interface StatusInterface {
   total_countries: string;
@@ -28,35 +31,27 @@ export class CountriesService {
     @InjectRepository(Country)
     private countriesRepository: Repository<Country>,
     private dataSource: DataSource,
+    private readonly httpService: HttpService,
   ) {}
 
-  private async fetchWithTimeout(url: string, timeoutMs: number = 8000) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, timeoutMs);
-
+  private async fetchWithTimeout<T>(
+    url: string,
+    timeoutMs: number = 10000,
+  ): Promise<T> {
     try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      return (await response.json()) as
-        | CountryApiResponse[]
-        | ExchangeRateApiResponse;
-    } catch (error: any) {
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          throw new Error(`Request timed out`);
+      const response = await firstValueFrom(
+        this.httpService.get<T>(url, {
+          timeout: timeoutMs,
+        }),
+      );
+      return response.data;
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+          throw new Error('Request timed out');
         }
       }
       throw error;
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
@@ -64,9 +59,10 @@ export class CountriesService {
     let exchangeRateData: ExchangeRateApiResponse;
     let countriesData: CountryApiResponse[];
     try {
-      exchangeRateData = (await this.fetchWithTimeout(
+      exchangeRateData = await this.fetchWithTimeout<ExchangeRateApiResponse>(
         'https://open.er-api.com/v6/latest/USD',
-      )) as ExchangeRateApiResponse;
+        10000,
+      );
     } catch (error) {
       console.log(error);
       throw new ServiceUnavailableException({
@@ -76,9 +72,10 @@ export class CountriesService {
     }
 
     try {
-      countriesData = (await this.fetchWithTimeout(
+      countriesData = await this.fetchWithTimeout<CountryApiResponse[]>(
         'https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies',
-      )) as CountryApiResponse[];
+        10000,
+      );
     } catch (error) {
       console.log(error);
       throw new ServiceUnavailableException({
@@ -141,7 +138,7 @@ export class CountriesService {
           order: { estimated_gdp: 'DESC' },
           select: ['name', 'estimated_gdp'],
           take: 5,
-        })) as { name: string; estimated_gdp: number }[];
+        })) as { name: string; estimated_gdp: number | null }[];
         await generateImage(totalCountries, top5Countries, refreshTime);
       } catch (imageError) {
         console.log('Failed to generate image: ', imageError);
@@ -194,7 +191,7 @@ export class CountriesService {
         throw new BadRequestException('Country name is required');
       }
       const country = await this.countriesRepository.findOne({
-        where: { name },
+        where: { name: ILike(name) },
       });
 
       if (!country) {
@@ -234,7 +231,7 @@ export class CountriesService {
       throw new BadRequestException('Country name is required');
     }
 
-    const result = await this.countriesRepository.delete({ name });
+    const result = await this.countriesRepository.delete({ name: ILike(name) });
     if (result.affected === 0) {
       throw new NotFoundException('Country not found');
     }
