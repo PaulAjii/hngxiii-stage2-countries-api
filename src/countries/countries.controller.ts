@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query } from '@nestjs/common';
 import { CountriesService } from './countries.service';
 import { QueryDto } from './dto/query.dto';
 
@@ -9,6 +9,11 @@ export class CountriesController {
   @Get()
   getAllCountries(@Query() filterQuery: QueryDto) {
     return this.countriesService.filterCountry(filterQuery);
+  }
+
+  @Get(':name')
+  getSingleCountry(@Param('name') name: string) {
+    return this.countriesService.getSingleCountry(name);
   }
 
   @Post('refresh')

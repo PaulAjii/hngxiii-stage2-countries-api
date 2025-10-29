@@ -1,4 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Country } from './countries.entity';
@@ -11,17 +15,6 @@ export class CountriesService {
     @InjectRepository(Country)
     private countriesRepository: Repository<Country>,
   ) {}
-
-  async getAllCountries(): Promise<Country[]> {
-    try {
-      const countries = await this.countriesRepository.find();
-      return countries;
-    } catch (error: any) {
-      console.error('Error fetching countries:');
-      throw error;
-    }
-  }
-
   async addCountries(): Promise<void> {
     try {
       const countriesResponse = await fetch(
@@ -104,6 +97,25 @@ export class CountriesService {
       return countries;
     } catch (error) {
       console.error('Problem');
+      throw error;
+    }
+  }
+
+  async getSingleCountry(name: string): Promise<Country> {
+    try {
+      if (!name) {
+        throw new BadRequestException('Country name is required');
+      }
+      const country = await this.countriesRepository.findOneOrFail({
+        where: { name },
+      });
+
+      if (!country) {
+        throw new NotFoundException('Country not found');
+      }
+      return country;
+    } catch (error) {
+      console.error('Error fetching country');
       throw error;
     }
   }
