@@ -25,4 +25,4 @@ jobs:
             git pull
             pnpm install
             pnpm build
-            pm2 restart hngx-api
+            pm2 restart hngxiii-countries-api
