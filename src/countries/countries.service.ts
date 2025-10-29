@@ -90,6 +90,13 @@ export class CountriesService {
     await queryRunner.startTransaction();
 
     try {
+      const allExistingCountries = await queryRunner.manager.find(Country);
+      const existingCountryMap = new Map<string, Country>();
+      for (const country of allExistingCountries) {
+        existingCountryMap.set(country.name.toLowerCase(), country);
+      }
+
+      const countriesToSave: Country[] = [];
       for (const c of countriesData) {
         const randomMultiplier = generateRandomNumber(1000, 2000);
 
@@ -110,10 +117,7 @@ export class CountriesService {
           estimatedGdp = 0;
         }
 
-        const existingCountry = await queryRunner.manager.findOne(Country, {
-          where: { name: ILike(c.name) },
-        });
-
+        const existingCountry = existingCountryMap.get(c.name.toLowerCase());
         const countryToSave = existingCountry || new Country();
 
         countryToSave.name = c.name;
@@ -123,15 +127,15 @@ export class CountriesService {
         countryToSave.currency_code = currencyCode;
         countryToSave.flag_url = c.flag;
         countryToSave.exchange_rate = exchangeRate;
-        countryToSave.estimated_gdp = estimatedGdp;
-
+        countryToSave.estimated_gdp = estimatedGGdp;
         countryToSave.last_refreshed_at = refreshTime;
 
-        await queryRunner.manager.save(countryToSave);
+        countriesToSave.push(countryToSave);
       }
 
-      await queryRunner.commitTransaction();
+      await queryRunner.manager.save(countriesToSave);
 
+      await queryRunner.commitTransaction();
       try {
         const totalCountries = await this.countriesRepository.count();
         const top5Countries = (await this.countriesRepository.find({
