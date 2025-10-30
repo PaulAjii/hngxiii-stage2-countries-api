@@ -9,7 +9,7 @@ export class InitialSchema1761833878455 implements MigrationInterface {
         \`capital\` varchar(255) NULL,
         \`region\` varchar(255) NULL,
         \`population\` int NOT NULL,
-        \`currency_code\` varchar(255) NOT NULL,
+        \`currency_code\` varchar(255) NULL,
         \`exchange_rate\` double NULL,
         \`estimated_gdp\` double NULL,
         \`flag_url\` varchar(255) NULL,
