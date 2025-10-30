@@ -26,5 +26,4 @@ jobs:
             pnpm install
             pnpm build
             npx typeorm-ts-node-commonjs migration:run -d dist/typeorm-cli.config.js
-            # restart pm2 process
-            pm2 restart hngxiii-countries-api
+            pm2 reload hngxiii-countries-api
