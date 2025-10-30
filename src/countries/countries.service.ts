@@ -56,105 +56,95 @@ export class CountriesService {
   }
 
   async addCountries(): Promise<void> {
-    let exchangeRateData: ExchangeRateApiResponse;
-    let countriesData: CountryApiResponse[];
-    try {
-      exchangeRateData = await this.fetchWithTimeout<ExchangeRateApiResponse>(
+  let exchangeRateData: ExchangeRateApiResponse;
+  let countriesData: CountryApiResponse[];
+
+  try {
+    // 1. FETCH IN PARALLEL (You're already doing this - great!)
+    const [exchangeResponse, countriesResponse] = await Promise.all([
+      this.fetchWithTimeout<ExchangeRateApiResponse>(
         'https://open.er-api.com/v6/latest/USD',
         10000,
-      );
-    } catch (error) {
-      console.log(error);
-      throw new ServiceUnavailableException({
-        error: 'External data source unavailable',
-        details: 'Could not fetch data from Exchange Rate API',
-      });
-    }
-
-    try {
-      countriesData = await this.fetchWithTimeout<CountryApiResponse[]>(
+      ),
+      this.fetchWithTimeout<CountryApiResponse[]>(
         'https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies',
         10000,
-      );
-    } catch (error) {
-      console.log(error);
-      throw new ServiceUnavailableException({
-        error: 'External data source unavailable',
-        details: 'Could not fetch data from RestCountries API',
-      });
-    }
-
-    const refreshTime = new Date();
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      const allExistingCountries = await queryRunner.manager.find(Country);
-      const existingCountryMap = new Map<string, Country>();
-      for (const country of allExistingCountries) {
-        existingCountryMap.set(country.name.toLowerCase(), country);
-      }
-
-      const countriesToSave: Country[] = [];
-      for (const c of countriesData) {
-        const randomMultiplier = generateRandomNumber(1000, 2000);
-
-        let currencyCode: string | null = null;
-        let exchangeRate: number | null = null;
-        let estimatedGdp: number | null = null;
-
-        if (c.currencies && c.currencies.length > 0) {
-          currencyCode = c.currencies[0].code;
-          if (currencyCode) {
-            exchangeRate = exchangeRateData.rates[currencyCode] || null;
-          }
-
-          estimatedGdp = exchangeRate
-            ? (c.population * randomMultiplier) / exchangeRate
-            : null;
-        } else {
-          estimatedGdp = 0;
-        }
-
-        const existingCountry = existingCountryMap.get(c.name.toLowerCase());
-        const countryToSave = existingCountry || new Country();
-
-        countryToSave.name = c.name;
-        countryToSave.capital = c.capital;
-        countryToSave.region = c.region;
-        countryToSave.population = c.population;
-        countryToSave.currency_code = currencyCode;
-        countryToSave.flag_url = c.flag;
-        countryToSave.exchange_rate = exchangeRate;
-        countryToSave.estimated_gdp = estimatedGdp;
-        countryToSave.last_refreshed_at = refreshTime;
-
-        countriesToSave.push(countryToSave);
-      }
-
-      await queryRunner.manager.save(countriesToSave);
-
-      await queryRunner.commitTransaction();
-      try {
-        const totalCountries = await this.countriesRepository.count();
-        const top5Countries = (await this.countriesRepository.find({
-          order: { estimated_gdp: 'DESC' },
-          select: ['name', 'estimated_gdp'],
-          take: 5,
-        })) as { name: string; estimated_gdp: number | null }[];
-        await generateImage(totalCountries, top5Countries, refreshTime);
-      } catch (imageError) {
-        console.log('Failed to generate image: ', imageError);
-      }
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      console.error('Error adding countries:', error);
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
+      ),
+    ]);
+    exchangeRateData = exchangeResponse;
+    countriesData = countriesResponse;
+  } catch (error) {
+    console.log(error);
+    throw new ServiceUnavailableException({
+      error: 'External data source unavailable',
+      details: 'Could not fetch data from external APIs',
+    });
   }
+
+  const refreshTime = new Date();
+  
+  // 2. BUILD THE PAYLOAD (No transaction or Map needed yet)
+  // This is just a fast in-memory loop
+  const countriesPayload: Partial<Country>[] = [];
+  for (const c of countriesData) {
+    const randomMultiplier = generateRandomNumber(1000, 2000);
+    let currencyCode: string | null = null;
+    let exchangeRate: number | null = null;
+    let estimatedGdp: number | null = null;
+
+    if (c.currencies && c.currencies.length > 0) {
+      currencyCode = c.currencies[0].code;
+      if (currencyCode) {
+        exchangeRate = exchangeRateData.rates[currencyCode] || null;
+      }
+      estimatedGdp = exchangeRate
+        ? (c.population * randomMultiplier) / exchangeRate
+        : null;
+    } else {
+      estimatedGdp = 0;
+    }
+
+    countriesPayload.push({
+      name: c.name,
+      capital: c.capital,
+      region: c.region,
+      population: c.population,
+      currency_code: currencyCode,
+      flag_url: c.flag,
+      exchange_rate: exchangeRate,
+      estimated_gdp: estimatedGdp,
+      last_refreshed_at: refreshTime,
+    });
+  }
+
+  // 3. RUN THE SINGLE UPSERT QUERY
+  // This is the 1-second operation that replaces your 1-minute one.
+  try {
+    await this.countriesRepository.upsert(countriesPayload, {
+      conflictPaths: ['name'], // Tell it to check for duplicate 'name'
+      skipUpdateIfNoValuesChanged: true, // extra optimization
+    });
+  } catch (error) {
+    console.error('Error during upsert:', error);
+    throw new InternalServerErrorException('Failed to save data');
+  }
+
+  // 4. GENERATE IMAGE (using the in-memory data)
+  try {
+    const totalCountries = countriesPayload.length;
+    const top5Countries = countriesPayload
+      .sort((a, b) => (b.estimated_gdp || 0) - (a.estimated_gdp || 0))
+      .slice(0, 5)
+      .map((country) => ({
+        name: country.name,
+        estimated_gdp: country.estimated_gdp,
+      }));
+    await generateImage(totalCountries, top5Countries, refreshTime);
+  } catch (imageError) {
+    console.log('Failed to generate image: ', imageError);
+  }
+}
+
 
   async filterCountry(filterQuery: QueryDto): Promise<Country[]> {
     try {
