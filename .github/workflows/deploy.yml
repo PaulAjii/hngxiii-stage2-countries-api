@@ -25,4 +25,5 @@ jobs:
             git pull
             pnpm install
             pnpm build
+            npx typeorm-ts-node-commonjs migration:run -d dist/typeorm-cli.config.js
             pm2 restart hngxiii-countries-api
