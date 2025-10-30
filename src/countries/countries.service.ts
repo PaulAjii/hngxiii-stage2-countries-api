@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -56,95 +57,86 @@ export class CountriesService {
   }
 
   async addCountries(): Promise<void> {
-  let exchangeRateData: ExchangeRateApiResponse;
-  let countriesData: CountryApiResponse[];
+    let exchangeRateData: ExchangeRateApiResponse;
+    let countriesData: CountryApiResponse[];
 
-  try {
-    // 1. FETCH IN PARALLEL (You're already doing this - great!)
-    const [exchangeResponse, countriesResponse] = await Promise.all([
-      this.fetchWithTimeout<ExchangeRateApiResponse>(
-        'https://open.er-api.com/v6/latest/USD',
-        10000,
-      ),
-      this.fetchWithTimeout<CountryApiResponse[]>(
-        'https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies',
-        10000,
-      ),
-    ]);
-    exchangeRateData = exchangeResponse;
-    countriesData = countriesResponse;
-  } catch (error) {
-    console.log(error);
-    throw new ServiceUnavailableException({
-      error: 'External data source unavailable',
-      details: 'Could not fetch data from external APIs',
-    });
-  }
-
-  const refreshTime = new Date();
-  
-  // 2. BUILD THE PAYLOAD (No transaction or Map needed yet)
-  // This is just a fast in-memory loop
-  const countriesPayload: Partial<Country>[] = [];
-  for (const c of countriesData) {
-    const randomMultiplier = generateRandomNumber(1000, 2000);
-    let currencyCode: string | null = null;
-    let exchangeRate: number | null = null;
-    let estimatedGdp: number | null = null;
-
-    if (c.currencies && c.currencies.length > 0) {
-      currencyCode = c.currencies[0].code;
-      if (currencyCode) {
-        exchangeRate = exchangeRateData.rates[currencyCode] || null;
-      }
-      estimatedGdp = exchangeRate
-        ? (c.population * randomMultiplier) / exchangeRate
-        : null;
-    } else {
-      estimatedGdp = 0;
+    try {
+      const [exchangeResponse, countriesResponse] = await Promise.all([
+        this.fetchWithTimeout<ExchangeRateApiResponse>(
+          'https://open.er-api.com/v6/latest/USD',
+          10000,
+        ),
+        this.fetchWithTimeout<CountryApiResponse[]>(
+          'https://restcountries.com/v2/all?fields=name,capital,region,population,flag,currencies',
+          10000,
+        ),
+      ]);
+      exchangeRateData = exchangeResponse;
+      countriesData = countriesResponse;
+    } catch (error) {
+      console.log(error);
+      throw new ServiceUnavailableException({
+        error: 'External data source unavailable',
+        details: 'Could not fetch data from external APIs',
+      });
     }
 
-    countriesPayload.push({
-      name: c.name,
-      capital: c.capital,
-      region: c.region,
-      population: c.population,
-      currency_code: currencyCode,
-      flag_url: c.flag,
-      exchange_rate: exchangeRate,
-      estimated_gdp: estimatedGdp,
-      last_refreshed_at: refreshTime,
-    });
-  }
+    const refreshTime = new Date();
+    const countriesPayload: Partial<Country>[] = [];
+    for (const c of countriesData) {
+      const randomMultiplier = generateRandomNumber(1000, 2000);
+      let currencyCode: string | null = null;
+      let exchangeRate: number | null = null;
+      let estimatedGdp: number | null = null;
 
-  // 3. RUN THE SINGLE UPSERT QUERY
-  // This is the 1-second operation that replaces your 1-minute one.
-  try {
-    await this.countriesRepository.upsert(countriesPayload, {
-      conflictPaths: ['name'], // Tell it to check for duplicate 'name'
-      skipUpdateIfNoValuesChanged: true, // extra optimization
-    });
-  } catch (error) {
-    console.error('Error during upsert:', error);
-    throw new InternalServerErrorException('Failed to save data');
-  }
+      if (c.currencies && c.currencies.length > 0) {
+        currencyCode = c.currencies[0].code;
+        if (currencyCode) {
+          exchangeRate = exchangeRateData.rates[currencyCode] || null;
+        }
+        estimatedGdp = exchangeRate
+          ? (c.population * randomMultiplier) / exchangeRate
+          : null;
+      } else {
+        estimatedGdp = 0;
+      }
 
-  // 4. GENERATE IMAGE (using the in-memory data)
-  try {
-    const totalCountries = countriesPayload.length;
-    const top5Countries = countriesPayload
-      .sort((a, b) => (b.estimated_gdp || 0) - (a.estimated_gdp || 0))
-      .slice(0, 5)
-      .map((country) => ({
-        name: country.name,
-        estimated_gdp: country.estimated_gdp,
-      }));
-    await generateImage(totalCountries, top5Countries, refreshTime);
-  } catch (imageError) {
-    console.log('Failed to generate image: ', imageError);
-  }
-}
+      countriesPayload.push({
+        name: c.name,
+        capital: c.capital,
+        region: c.region,
+        population: c.population,
+        currency_code: currencyCode,
+        flag_url: c.flag,
+        exchange_rate: exchangeRate,
+        estimated_gdp: estimatedGdp,
+        last_refreshed_at: refreshTime,
+      });
+    }
+    try {
+      await this.countriesRepository.upsert(countriesPayload, {
+        conflictPaths: ['name'],
+        skipUpdateIfNoValuesChanged: true,
+      });
+    } catch (error) {
+      console.error('Error during upsert:', error);
+      throw new InternalServerErrorException('Failed to save data');
+    }
 
+    try {
+      const totalCountries = countriesPayload.length;
+      const top5Countries = countriesPayload
+        .sort((a, b) => (b.estimated_gdp || 0) - (a.estimated_gdp || 0))
+        .slice(0, 5)
+        .map((country) => ({
+          name: country.name,
+          estimated_gdp: country.estimated_gdp,
+        })) as { name: string; estimated_gdp: number }[];
+      await generateImage(totalCountries, top5Countries, refreshTime);
+    } catch (imageError) {
+      console.log('Failed to generate image: ', imageError);
+    }
+  }
 
   async filterCountry(filterQuery: QueryDto): Promise<Country[]> {
     try {
